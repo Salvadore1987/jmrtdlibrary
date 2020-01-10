@@ -9,9 +9,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class DeviceInfo {
 
-    private String serialNumber;
-    private String productInformation;
-    private String nnaVersion;
-    private String version;
+    protected String serialNumber;
+    protected String productInformation;
+    protected String nnaVersion;
+    protected String version;
 
 }

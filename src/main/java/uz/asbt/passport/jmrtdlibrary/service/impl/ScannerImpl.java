@@ -1,6 +1,8 @@
 package uz.asbt.passport.jmrtdlibrary.service.impl;
 
-import jssc.*;
+import jssc.SerialPort;
+import jssc.SerialPortException;
+import jssc.SerialPortTimeoutException;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.scuba.smartcards.CardService;
 import net.sf.scuba.smartcards.CardServiceException;
@@ -18,7 +20,6 @@ import uz.asbt.passport.jmrtdlibrary.model.MRZData;
 import uz.asbt.passport.jmrtdlibrary.model.PassportData;
 import uz.asbt.passport.jmrtdlibrary.model.rest.MRZRequest;
 import uz.asbt.passport.jmrtdlibrary.service.Scanner;
-import uz.asbt.passport.jmrtdlibrary.util.PortReader;
 
 import javax.imageio.ImageIO;
 import javax.smartcardio.CardException;
@@ -30,6 +31,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.text.ParseException;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Класс обертка, предназначен для работы со считывателями.
@@ -45,6 +47,48 @@ import java.util.List;
 @Slf4j
 public class ScannerImpl implements Scanner {
 
+    private SerialPort serialPort;
+
+    /**
+     * Метод для открытия соедеинения с указанным COM-портом
+     * @param portName - наименование порта (COM1, COM2 etc)
+     * @return true - если соединение успешно открыто
+     */
+    private boolean connect(String portName) {
+        try {
+            serialPort = new SerialPort(portName);
+            if (serialPort.isOpened())
+                return true;
+            if (serialPort.openPort()) {
+                log.info("Port opened");
+                serialPort.setParams(
+                        SerialPort.BAUDRATE_9600,
+                        SerialPort.DATABITS_8,
+                        SerialPort.STOPBITS_1,
+                        SerialPort.PARITY_NONE);
+                serialPort.setFlowControlMode(SerialPort.FLOWCONTROL_RTSCTS_IN |
+                        SerialPort.FLOWCONTROL_RTSCTS_OUT);
+                return true;
+            }
+        } catch (Exception ex) {
+            log.error(ex.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Метод закрывает соединение с указанным портом
+     * @return true - в случае успешного закрытия
+     */
+    private boolean disconnect() {
+        try {
+            return serialPort.closePort();
+        } catch (Exception ex) {
+            log.error(ex.getMessage());
+        }
+        return false;
+    }
+
     /**
      * Данный метод считывает данные из паспорта, формирует объект @see PassportData и возвращает его.
      * Работает только с ридерами "Elyctis" или совместимыми с ним.
@@ -54,8 +98,9 @@ public class ScannerImpl implements Scanner {
      * @throws JMRTDException в случае ошибки.
      */
     @Override
-    public PassportData scan(String terminalName, long timeout) throws JMRTDException {
-        String mrz = readMrz(timeout);
+    public PassportData scan(String comPort) throws JMRTDException, ExecutionException, InterruptedException {
+        String mrz = readMrz(comPort);
+        System.out.println("MRZ: " + mrz);
         return passportData(mrz, null, null);
     }
 
@@ -69,43 +114,43 @@ public class ScannerImpl implements Scanner {
      * @throws JMRTDException в случае возникновения ошибки.
      */
     @Override
-    public PassportData scan(MRZRequest request, String terminalName, long timeout) throws JMRTDException {
+    public PassportData scan(MRZRequest request, String terminalName, String comPort) throws JMRTDException {
         return passportData(null,null, request);
     }
 
     @Override
-    public DeviceInfo info(long timeout) throws JMRTDException {
+    public DeviceInfo info(String comPort) throws JMRTDException {
         DeviceInfo deviceInfo = new DeviceInfo();
-        deviceInfo.setSerialNumber(readDeviceSN(timeout));
-        deviceInfo.setNnaVersion(readDeviceNNAVersion(timeout));
-        deviceInfo.setProductInformation(readDeviceProductInformation(timeout));
-        deviceInfo.setVersion(readDeviceVersion(timeout));
+        deviceInfo.setSerialNumber(readDeviceSN(comPort));
+        deviceInfo.setNnaVersion(readDeviceNNAVersion(comPort));
+        deviceInfo.setProductInformation(readDeviceProductInformation(comPort));
+        deviceInfo.setVersion(readDeviceVersion(comPort));
         return deviceInfo;
     }
 
     @Override
-    public String deviceSerialNumber(long timeout) throws JMRTDException {
-        return readDeviceSN(timeout);
+    public String deviceSerialNumber(String comPort) throws JMRTDException {
+        return readDeviceSN(comPort);
     }
 
     @Override
-    public String deviceNNAVersion(long timeout) throws JMRTDException {
-        return readDeviceNNAVersion(timeout);
+    public String deviceNNAVersion(String comPort) throws JMRTDException {
+        return readDeviceNNAVersion(comPort);
     }
 
     @Override
-    public String deviceProductInformation(long timeout) throws JMRTDException {
-        return readDeviceProductInformation(timeout);
+    public String deviceProductInformation(String comPort) throws JMRTDException {
+        return readDeviceProductInformation(comPort);
     }
 
     @Override
-    public String deviceVersion(long timeout) throws JMRTDException {
-        return readDeviceVersion(timeout);
+    public String deviceVersion(String comPort) throws JMRTDException {
+        return readDeviceVersion(comPort);
     }
 
     @Override
-    public String mrzString(long timeout) throws JMRTDException {
-        return readMrz(timeout);
+    public String mrzString(String comPort) throws JMRTDException {
+        return readMrz(comPort);
     }
 
     /**
@@ -151,10 +196,18 @@ public class ScannerImpl implements Scanner {
             passportData = PassportData.PassportBuilder.build(dg1.getMRZInfo());
             if (mrz != null) {
                 String[] mrzArr = mrz.split("\n");
-                String line1 = mrzArr[0].replaceAll("\\p{C}", "");
-                passportData.setMrzLine1(line1.substring(2, line1.length()));
-                passportData.setMrzLine2(mrzArr[1].replaceAll("\\p{C}", ""));
-                passportData.setMrzLine3(mrzArr[2].replaceAll("\\p{C}", ""));
+                if (mrzArr.length == 2) {
+                    String line1 = mrzArr[0].replaceAll("\\p{C}", "");
+                    passportData.setMrzLine1(line1.substring(2, line1.length()));
+                    passportData.setMrzLine2(mrzArr[1].replaceAll("\\p{C}", ""));
+                } else if (mrzArr.length == 3) {
+                    String line1 = mrzArr[0].replaceAll("\\p{C}", "");
+                    passportData.setMrzLine1(line1.substring(2, line1.length()));
+                    passportData.setMrzLine2(mrzArr[1].replaceAll("\\p{C}", ""));
+                    passportData.setMrzLine3(mrzArr[2].replaceAll("\\p{C}", ""));
+                } else {
+                    throw new JMRTDException(Error.MRZ_DATA_EMPTY.getCode(), "MRZ data is empty");
+                }
             }
             passportData.setPhoto(getPhoto(dg2));
 
@@ -243,29 +296,93 @@ public class ScannerImpl implements Scanner {
      * @return строку MRZ
      * @throws SerialPortException - в случае возникновения ошибки.
      */
-    private String readMrz(long timeout) throws JMRTDException {
+    private String readMrz(String comPort) throws JMRTDException {
         byte[] inquire = {0x49, 0, 0};
-        return new PortReader().read(inquire, timeout);
+        return readDataFromScanner(comPort, inquire);
     }
 
-    private String readDeviceSN(long timeout) throws JMRTDException {
+    private synchronized String readDataFromScanner(String comPort, byte[] inquire) throws JMRTDException {
+        StringBuilder builder = new StringBuilder();
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        char cmd;
+        try {
+            boolean isConnected = connect(comPort);
+            if (isConnected) {
+                System.out.println("Begin write data into port");
+                if (serialPort.writeBytes(inquire)) {
+                    int length = 0;
+
+                    int i = 0;
+                    // Wait for a response from the scanner
+                    for (; i < 10000; i += 10) {
+                        Thread.sleep(10);
+                        if ((length = serialPort.getInputBufferBytesCount()) > 2) {
+                            break;
+                        }
+                    }
+
+                    byte[] data = serialPort.readBytes(length, 10000);
+                    cmd = (char) data[0];
+
+                    for (int j = 3; j < data.length; j++) {
+                        baos.write(data[j]);
+                    }
+                    byte[] response = baos.toByteArray();
+                    serialPort.purgePort(SerialPort.PURGE_RXCLEAR);
+
+                    System.out.println(cmd);
+                    if (response.length == 0)
+                        return builder.toString();
+
+                    switch (cmd) {
+                        case 'I':
+                        case 'R':
+                        case 'V':
+                        case 'W':
+                        case 'T':
+                            builder.append(new String(response));
+                            break;
+                        default:
+                            throw new JMRTDException(Error.COM_PORT_READ_DATA_ERROR.getCode(), "Can't read data from port");
+                    }
+                } else {
+                    throw new JMRTDException(Error.COM_PORT_WRITE_ERROR.getCode(), "Can't write data into COM-Port");
+                }
+            } else {
+                throw new JMRTDException(Error.COM_PORT_OPEN_ERROR.getCode(), "Can't open COM-port");
+            }
+        } catch (SerialPortException ex) {
+            throw new JMRTDException(Error.MRZ_READ_ERROR.getCode(), "Can't read MRZ");
+        } catch (SerialPortTimeoutException ex) {
+            throw new JMRTDException(Error.MRZ_READ_TIMEOUT.getCode(), "Timeout when read MRZ data");
+        } catch (InterruptedException ex) {
+            throw new JMRTDException(Error.MRZ_READ_TIMEOUT.getCode(), "Timeout when read MRZ data");
+        } finally {
+            disconnect();
+        }
+        if (cmd == 'I')
+            return builder.toString().replace("\r", "\r\n");
+        return builder.toString().replaceAll("\\p{C}", "");
+    }
+
+    private String readDeviceSN(String comPort) throws JMRTDException {
         byte[] inquire = {0x52, 0, 0};
-        return new PortReader().read(inquire, timeout);
+        return readDataFromScanner(comPort, inquire);
     }
 
-    private String readDeviceVersion(long timeout) throws JMRTDException {
+    private String readDeviceVersion(String comPort) throws JMRTDException {
         byte[] inquire = {0x56, 0, 0};
-        return new PortReader().read(inquire, timeout);
+        return readDataFromScanner(comPort, inquire);
     }
 
-    private String readDeviceNNAVersion(long timeout) throws JMRTDException {
+    private String readDeviceNNAVersion(String comPort) throws JMRTDException {
         byte[] inquire = {0x57, 0, 0};
-        return new PortReader().read(inquire, timeout);
+        return readDataFromScanner(comPort, inquire);
     }
 
-    private String readDeviceProductInformation(long timeout) throws JMRTDException {
+    private String readDeviceProductInformation(String comPort) throws JMRTDException {
         byte[] inquire = {0x54, 0, 0};
-        return new PortReader().read(inquire, timeout);
+        return readDataFromScanner(comPort, inquire);
     }
 
 }
