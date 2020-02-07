@@ -1,5 +1,6 @@
 package uz.asbt.passport.jmrtdlibrary.service.impl;
 
+import com.sun.org.apache.bcel.internal.classfile.Code;
 import jssc.SerialPort;
 import jssc.SerialPortException;
 import jssc.SerialPortTimeoutException;
@@ -93,7 +94,7 @@ public class ScannerImpl implements Scanner {
      * Данный метод считывает данные из паспорта, формирует объект @see PassportData и возвращает его.
      * Работает только с ридерами "Elyctis" или совместимыми с ним.
      * Автоматически считывает MRZ через OCR сканнер.
-     * @param terminalName имя устройства с которового производится чтение.
+     * @param comPort имя устройства с которового производится чтение.
      * @return @see PassportData
      * @throws JMRTDException в случае ошибки.
      */
@@ -267,19 +268,37 @@ public class ScannerImpl implements Scanner {
     private CardTerminal getTerminal(String terminalName) throws JMRTDException, CardException {
         TerminalFactory factory = TerminalFactory.getDefault();
         List<CardTerminal> terminals = factory.terminals().list();
+        terminals.forEach(i -> log.info(i.getName()));
         CardTerminal terminal;
 
-        if (null == terminalName) {
-            terminal = terminals.get(0);
+        if (terminalName == null) {
+            if (terminals.size() == 0) {
+                log.info("Terminal size is 0");
+                throw new JMRTDException(Error.TERMINAL_NOT_FOUND.getCode(), "Terminal not found");
+            } else if (terminals.size() == 1) {
+                log.info("Terminal size is 1");
+                terminal = terminals.get(0);
+            } else {
+                log.info("Terminal ELYCTIS");
+                final String elyctisTerminal = "ELYCTIS CL";
+                terminal = terminals.stream()
+                        .filter(t -> t.getName().contains(elyctisTerminal))
+                        .findFirst()
+                        .orElse(null);
+                if (terminal == null)
+                    throw new JMRTDException(Error.TERMINAL_NOT_FOUND.getCode(), "Terminal not found");
+            }
         } else {
+            log.info("Terminal Other: {}", terminalName);
             terminal = terminals.stream()
-                    .filter(t -> t.getName().equals(terminalName))
+                    .filter(t -> t.getName().contains(terminalName))
                     .findFirst()
                     .orElse(null);
+            if (terminal == null)
+                throw new JMRTDException(Error.TERMINAL_NOT_FOUND.getCode(), "Terminal not found");
         }
-
-        if (null == terminal)
-            throw new JMRTDException(-1, "Terminal not found");
+        if (!terminal.isCardPresent())
+            throw new JMRTDException(Error.CARD_ERROR.getCode(), "Card not present");
         return terminal;
     }
 
@@ -321,7 +340,9 @@ public class ScannerImpl implements Scanner {
                         }
                     }
 
-                    byte[] data = serialPort.readBytes(length, 10000);
+                    byte[] data = serialPort.readBytes(length, 100000);
+                    if (data.length == 0)
+                        throw new JMRTDException(Error.COM_PORT_READ_DATA_ERROR.getCode(), "Can't read data from port");
                     cmd = (char) data[0];
 
                     for (int j = 3; j < data.length; j++) {
@@ -329,7 +350,9 @@ public class ScannerImpl implements Scanner {
                     }
                     byte[] response = baos.toByteArray();
                     serialPort.purgePort(SerialPort.PURGE_RXCLEAR);
-
+                    serialPort.purgePort(SerialPort.STOPBITS_1);
+                    serialPort.purgePort(SerialPort.ERROR_OVERRUN);
+                    serialPort.closePort();
                     System.out.println(cmd);
                     if (response.length == 0)
                         return builder.toString();
