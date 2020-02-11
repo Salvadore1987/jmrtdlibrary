@@ -199,11 +199,11 @@ public class ScannerImpl implements Scanner {
                 String[] mrzArr = mrz.split("\n");
                 if (mrzArr.length == 2) {
                     String line1 = mrzArr[0].replaceAll("\\p{C}", "");
-                    passportData.setMrzLine1(line1.substring(2, line1.length()));
+                    passportData.setMrzLine1(line1);
                     passportData.setMrzLine2(mrzArr[1].replaceAll("\\p{C}", ""));
                 } else if (mrzArr.length == 3) {
                     String line1 = mrzArr[0].replaceAll("\\p{C}", "");
-                    passportData.setMrzLine1(line1.substring(2, line1.length()));
+                    passportData.setMrzLine1(line1);
                     passportData.setMrzLine2(mrzArr[1].replaceAll("\\p{C}", ""));
                     passportData.setMrzLine3(mrzArr[2].replaceAll("\\p{C}", ""));
                 } else {
