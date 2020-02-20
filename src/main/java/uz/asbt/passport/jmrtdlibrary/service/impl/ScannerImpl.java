@@ -237,7 +237,11 @@ public class ScannerImpl implements Scanner {
         PassportService passportService = null;
         try {
             log.info("MRZ string is {}", mrz);
-            CardService cardService = CardService.getInstance(getTerminal(terminalName));
+            CardTerminal cardTerminal = getTerminal(terminalName);
+            if (!cardTerminal.isCardPresent()) {
+                throw new JMRTDException(Error.CARD_NOT_PRESENT.getCode(), "Card not present");
+            }
+            CardService cardService = CardService.getInstance(cardTerminal);
             passportService = new PassportService(
                     cardService,
                     PassportService.NORMAL_MAX_TRANCEIVE_LENGTH,

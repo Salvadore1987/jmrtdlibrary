@@ -12,7 +12,8 @@ public enum Error {
     MRZ_DATA_EMPTY(1109),
     MRZ_READ_TIMEOUT(1110),
     COM_PORT_OPEN_ERROR(1111),
-    TERMINAL_NOT_FOUND(1112)
+    TERMINAL_NOT_FOUND(1112),
+    CARD_NOT_PRESENT(1113)
     ;
 
     private int code;
