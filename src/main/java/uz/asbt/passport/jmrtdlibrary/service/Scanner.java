@@ -7,15 +7,16 @@ import uz.asbt.passport.jmrtdlibrary.model.rest.MRZRequest;
 
 import java.util.concurrent.ExecutionException;
 
-public interface Scanner {
+public interface Scanner extends AutoCloseable {
 
-    PassportData scan(String comPort) throws JMRTDException, ExecutionException, InterruptedException;
-    PassportData scan(MRZRequest request, String terminalName, String comPort) throws JMRTDException;
-    DeviceInfo info(String comPort) throws JMRTDException;
-    String deviceSerialNumber(String comPort) throws JMRTDException;
-    String deviceNNAVersion(String comPort) throws JMRTDException;
-    String deviceProductInformation(String comPort) throws JMRTDException;
-    String deviceVersion(String comPort) throws JMRTDException;
-    String mrzString(String comPort) throws JMRTDException;
+    PassportData scan() throws JMRTDException, ExecutionException, InterruptedException;
+    PassportData scan(MRZRequest request, String terminalName) throws JMRTDException;
+    PassportData scan(String mrzString) throws JMRTDException;
+    DeviceInfo info() throws JMRTDException;
+    String deviceSerialNumber() throws JMRTDException;
+    String deviceNNAVersion() throws JMRTDException;
+    String deviceProductInformation() throws JMRTDException;
+    String deviceVersion() throws JMRTDException;
+    String mrzString() throws JMRTDException;
 
 }

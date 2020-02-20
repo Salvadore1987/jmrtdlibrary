@@ -17,8 +17,8 @@ public class Main {
                 throw new IllegalArgumentException("Please send COM port");
             }
             System.out.println(args[0]);
-            Scanner scanner = new ScannerImpl();
-            DeviceInfo info = scanner.info(args[0]);
+            Scanner scanner = new ScannerImpl(args[0]);
+            DeviceInfo info = scanner.info();
             System.out.println("SN: " + info.getSerialNumber());
             System.out.println("NNA Version: " + info.getNnaVersion());
             System.out.println("Product info: " + info.getProductInformation());

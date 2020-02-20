@@ -17,7 +17,7 @@ public class DeviceService {
      * @return - список имен портов
      * @throws JMRTDException в случае ошибки
      */
-    public static List<String> comPortList() throws JMRTDException {
+    public static List<String> comPortList() {
         return Arrays.asList(SerialPortList.getPortNames());
     }
 
