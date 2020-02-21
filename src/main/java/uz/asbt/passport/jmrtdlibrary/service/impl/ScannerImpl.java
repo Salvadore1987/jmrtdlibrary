@@ -24,6 +24,7 @@ import uz.asbt.passport.jmrtdlibrary.service.Scanner;
 import javax.imageio.ImageIO;
 import javax.smartcardio.CardException;
 import javax.smartcardio.CardTerminal;
+import javax.smartcardio.CardTerminals;
 import javax.smartcardio.TerminalFactory;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
@@ -163,7 +164,10 @@ public class ScannerImpl implements Scanner {
         PassportService passportService = null;
         try {
             log.info("MRZ string is {}", mrzString);
-            CardService cardService = CardService.getInstance(getTerminal(null));
+            CardTerminal terminal = getTerminal(null);
+            if (!terminal.isCardPresent())
+                throw new JMRTDException(Error.CARD_ERROR.getCode(), "Card not present");
+            CardService cardService = CardService.getInstance(terminal);
             passportService = new PassportService(
                     cardService,
                     PassportService.NORMAL_MAX_TRANCEIVE_LENGTH,
@@ -335,40 +339,44 @@ public class ScannerImpl implements Scanner {
         return (DG2File) LDSFileUtil.getLDSFile(PassportService.EF_DG2, is);
     }
 
-    private CardTerminal getTerminal(String terminalName) throws JMRTDException, CardException {
-        TerminalFactory factory = TerminalFactory.getDefault();
-        List<CardTerminal> terminals = factory.terminals().list();
-        terminals.forEach(i -> log.info(i.getName()));
+    private CardTerminal getTerminal(String terminalName) throws JMRTDException {
         CardTerminal terminal;
+        try {
+            TerminalFactory factory = TerminalFactory.getDefault();
+            log.info("Default factory is present");
+            List<CardTerminal> terminals = factory.terminals().list();
+            log.info("Getting list of terminals");
+            terminals.forEach(i -> log.info(i.getName()));
 
-        if (terminalName == null) {
-            if (terminals.size() == 0) {
-                log.info("Terminal size is 0");
-                throw new JMRTDException(Error.TERMINAL_NOT_FOUND.getCode(), "Terminal not found");
-            } else if (terminals.size() == 1) {
-                log.info("Terminal size is 1");
-                terminal = terminals.get(0);
+            if (terminalName == null) {
+                if (terminals.size() == 0) {
+                    log.info("Terminal size is 0");
+                    throw new JMRTDException(Error.TERMINAL_NOT_FOUND.getCode(), "Terminal not found");
+                } else if (terminals.size() == 1) {
+                    log.info("Terminal size is 1");
+                    terminal = terminals.get(0);
+                } else {
+                    log.info("Terminal ELYCTIS");
+                    final String elyctisTerminal = "ELYCTIS CL";
+                    terminal = terminals.stream()
+                            .filter(t -> t.getName().contains(elyctisTerminal))
+                            .findFirst()
+                            .orElse(null);
+                    if (terminal == null)
+                        throw new JMRTDException(Error.TERMINAL_NOT_FOUND.getCode(), "Terminal not found");
+                }
             } else {
-                log.info("Terminal ELYCTIS");
-                final String elyctisTerminal = "ELYCTIS CL";
+                log.info("Terminal Other: {}", terminalName);
                 terminal = terminals.stream()
-                        .filter(t -> t.getName().contains(elyctisTerminal))
+                        .filter(t -> t.getName().contains(terminalName))
                         .findFirst()
                         .orElse(null);
                 if (terminal == null)
                     throw new JMRTDException(Error.TERMINAL_NOT_FOUND.getCode(), "Terminal not found");
             }
-        } else {
-            log.info("Terminal Other: {}", terminalName);
-            terminal = terminals.stream()
-                    .filter(t -> t.getName().contains(terminalName))
-                    .findFirst()
-                    .orElse(null);
-            if (terminal == null)
-                throw new JMRTDException(Error.TERMINAL_NOT_FOUND.getCode(), "Terminal not found");
+        } catch (CardException ex) {
+            throw new JMRTDException(Error.TERMINAL_NOT_FOUND.getCode(), "Terminal not found");
         }
-        if (!terminal.isCardPresent())
-            throw new JMRTDException(Error.CARD_ERROR.getCode(), "Card not present");
         return terminal;
     }
 
