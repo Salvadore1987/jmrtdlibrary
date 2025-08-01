@@ -24,7 +24,6 @@ import uz.asbt.passport.jmrtdlibrary.service.Scanner;
 import javax.imageio.ImageIO;
 import javax.smartcardio.CardException;
 import javax.smartcardio.CardTerminal;
-import javax.smartcardio.CardTerminals;
 import javax.smartcardio.TerminalFactory;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
